@@ -5,7 +5,7 @@
 
 `default_nettype none
 
-module tt_um_risc-v-wg_swc1 (
+module tt_um_risc_v_wg_swc1 (
     input  wire [7:0] ui_in,    // Dedicated inputs
     output wire [7:0] uo_out,   // Dedicated outputs
     input  wire [7:0] uio_in,   // IOs: Input path
