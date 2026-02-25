@@ -1,0 +1,434 @@
+/*
+ * My RISC-V RV32I CPU
+ *   FPGA Top module
+ *    Verilog code
+ * @auther		Yoshiki Kurokawa <yoshiki.k963@gmail.com>
+ * @copylight	2025 Yoshiki Kurokawa
+ * @license		https://opensource.org/licenses/MIT     MIT license
+ * @version		0.1
+ */
+
+module fpga_top (
+	input clkin,
+	input rst_n,
+
+	input interrupt_0,
+
+	output sck,
+	output [2:0] ce_n,
+	//inout [3:0] sio,
+	input [3:0] sio_i,
+	output [3:0] sio_o,
+	output sio_en,
+
+	input rx,
+	output tx,
+	output [2:0] rgb_led,
+	//inout [3:0] gpio,
+	input [3:0] gpio_i,
+	output [3:0] gpio_o,
+	output [3:0] gpio_en,
+
+	input [1:0] init_latency,
+	input init_qspicmd,
+	input init_cpu_start,
+	input [1:0] init_uart
+
+	);
+
+wire clk;
+wire locked;
+// cpu
+wire [31:0] pc_data; // input NAI!
+wire cmd_ld_ma;
+wire cmd_st_ma;
+wire [31:0] rd_data_ma;
+wire cpu_start; // input
+wire quit_cmd; // output NAI!
+wire [31:2] cpu_start_adr;
+wire i_read_req; // output
+wire i_read_w; // output
+wire i_read_hw; // output
+wire [31:0] i_read_adr; // output
+wire d_read_req; // output
+wire d_read_w; // output
+wire d_read_hw; // output
+wire read_valid; // input
+wire [31:0] d_read_adr; // output
+wire [31:0] read_data; // input
+wire d_write_req; // output
+wire d_write_w; // output
+wire d_write_hw; // output
+wire write_finish; // input
+wire [31:0] d_write_adr; // output
+wire [31:0] d_write_data; // output
+
+// qspi
+wire read_req; // output
+wire read_w; // output
+wire read_hw; // output
+wire [31:0] read_adr; // output
+wire write_req; // output
+wire write_w; // output
+wire write_hw; // output
+wire [31:0] write_adr; // output
+wire [31:0] write_data; // output
+
+// uart
+wire u_read_req; // input
+wire u_read_w; // input
+wire [31:0] u_read_adr; // input
+wire u_write_req; // input
+wire u_write_w; // input
+wire [31:0] u_write_adr; // input
+wire [31:0] u_write_data; // input
+
+// uart IO
+wire [7:0] uart_io_char; // input
+wire uart_io_we; // input
+wire uart_io_full; // output
+wire [15:0] uart_term;
+wire rout_en;
+wire [7:0] rout;
+wire cpu_run_state;
+
+// io bus for cpu
+wire dma_io_we_c; // output
+wire [15:2] dma_io_wadr_c; // output
+wire [31:0] dma_io_wdata_c; // output
+wire [15:2] dma_io_radr_c; // output
+wire dma_io_radr_en_c; // output
+// io bus for uart
+wire dma_io_we_u; // output
+wire [15:2] dma_io_wadr_u; // output
+wire [31:0] dma_io_wdata_u; // output
+wire [15:2] dma_io_radr_u; // output
+wire dma_io_radr_en_u; // output
+// io bus read datat
+wire [31:0] dma_io_rdata; // input
+wire [31:0] dma_io_rdata_in = 32'hdeadbeef; // input
+//wire [31:0] dma_io_rdata_in = 32'd0; // input
+wire [31:0] dma_io_rdata_in_2; // input
+wire [31:0] dma_io_rdata_in_3; // input
+wire [31:0] dma_io_rdata_in_4; // input
+wire [31:0] dma_io_rdata_in_5; // input
+wire [31:0] dma_io_rdata_in_6; // input
+
+// csr monitor bus
+wire csr_radr_en_mon; // output
+wire [11:0] csr_radr_mon; // output
+wire [11:0] csr_wadr_mon; // output
+wire csr_we_mon; // output
+wire [31:0] csr_wdata_mon; // output
+wire [31:0] csr_rdata_mon; // input
+// rf monitor bus
+wire rf_radr_en_mon; // output
+wire [4:0] rf_radr_mon; // output
+wire [4:0] rf_wadr_mon; // output
+wire rf_we_mon; // output
+wire [31:0] rf_wdata_mon; // output
+wire [31:0] rf_rdata_mon; // input
+
+// for free run counter signals
+wire csr_mtie;
+wire frc_cntr_val_leq;
+//wire interrupt_clear;
+wire ext_uart_interrpt_1shot;
+wire csr_rmie;
+wire csr_meie;
+wire g_interrupt_1shot;
+wire g_interrupt;
+
+// uart rx 
+wire rx_disable_echoback;
+
+// spi IO signals
+wire spi_select_io; // output
+wire spi_sck; // output
+wire [1:0] spi_csn; // output
+wire spi_mosi; // output
+wire [2:0] rgb_led_org;
+
+// spi IO selector
+assign rgb_led = spi_select_io ? { spi_mosi, spi_csn[0], spi_sck } : rgb_led_org;
+wire spi_miso = init_qspicmd; // input
+
+// io bus logics
+wire dma_io_we = dma_io_we_c | dma_io_we_u;
+wire [15:2] dma_io_wadr = dma_io_we_u ? dma_io_wadr_u : dma_io_wadr_c;
+wire [31:0] dma_io_wdata = dma_io_we_u ? dma_io_wdata_u : dma_io_wdata_c;
+wire dma_io_radr_en = dma_io_radr_en_c | dma_io_radr_en_u;
+wire [15:2] dma_io_radr = dma_io_radr_en_u ? dma_io_radr_u : dma_io_radr_c;
+
+assign clk = clkin;
+//clk_wiz_0 clk_wiz_0 (
+	//.clk_out1(clk),
+	//.reset(~rst_n),
+	//.locked(locked),
+	//.clk_in1(clkin)
+	//);
+
+cpu_top cpu_top (
+	.clk(clk),
+	.rst_n(rst_n),
+	.cpu_start(cpu_start),
+	.init_cpu_start(init_cpu_start),
+	.quit_cmd(quit_cmd),
+	.cpu_start_adr(cpu_start_adr),
+	.pc_data(pc_data),
+	.cmd_ld_ma(cmd_ld_ma),
+	.cmd_st_ma(cmd_st_ma),
+	.rd_data_ma(rd_data_ma),
+	.csr_mtie(csr_mtie),
+	.frc_cntr_val_leq(frc_cntr_val_leq),
+	.cpu_run_state(cpu_run_state),
+	.csr_meie(csr_meie),
+	.csr_rmie(csr_rmie),
+	.g_interrupt_1shot(g_interrupt_1shot),
+	.g_interrupt(g_interrupt),
+	.i_read_req(i_read_req),
+	.i_read_w(i_read_w),
+	.i_read_hw(i_read_hw),
+	.i_read_adr(i_read_adr),
+	.d_read_req(d_read_req),
+	.d_read_w(d_read_w),
+	.d_read_hw(d_read_hw),
+	.read_valid(read_valid),
+	.d_read_adr(d_read_adr),
+	.read_data(read_data),
+	.d_write_req(d_write_req),
+	.d_write_w(d_write_w),
+	.d_write_hw(d_write_hw),
+	.write_finish(write_finish),
+	.d_write_adr(d_write_adr),
+	.d_write_data(d_write_data),
+	.dma_io_we(dma_io_we_c),
+	.dma_io_wadr(dma_io_wadr_c),
+	.dma_io_wdata(dma_io_wdata_c),
+	.dma_io_radr(dma_io_radr_c),
+	.dma_io_radr_en(dma_io_radr_en_c),
+	.dma_io_rdata(dma_io_rdata),
+	.csr_radr_en_mon(csr_radr_en_mon),
+	.csr_radr_mon(csr_radr_mon),
+	.csr_wadr_mon(csr_wadr_mon),
+	.csr_we_mon(csr_we_mon),
+	.csr_wdata_mon(csr_wdata_mon),
+	.csr_rdata_mon(csr_rdata_mon),
+	.rf_radr_en_mon(rf_radr_en_mon),
+	.rf_radr_mon(rf_radr_mon),
+	.rf_wadr_mon(rf_wadr_mon),
+	.rf_we_mon(rf_we_mon),
+	.rf_wdata_mon(rf_wdata_mon),
+	.rf_rdata_mon(rf_rdata_mon)
+	);
+
+bus_gather bus_gather (
+	.clk(clk),
+	.rst_n(rst_n),
+	.i_read_req(i_read_req),
+	.i_read_w(i_read_w),
+	.i_read_hw(i_read_hw),
+	.i_read_adr(i_read_adr),
+	.d_read_req(d_read_req),
+	.d_read_w(d_read_w),
+	.d_read_hw(d_read_hw),
+	.d_read_adr(d_read_adr),
+	.d_write_req(d_write_req),
+	.d_write_w(d_write_w),
+	.d_write_hw(d_write_hw),
+	.d_write_adr(d_write_adr),
+	.d_write_data(d_write_data),
+	.u_read_req(u_read_req),
+	.u_read_w(u_read_w),
+	.u_read_adr(u_read_adr),
+	.u_write_req(u_write_req),
+	.u_write_w(u_write_w),
+	.u_write_adr(u_write_adr),
+	.u_write_data(u_write_data),
+	.read_req(read_req),
+	.read_w(read_w),
+	.read_hw(read_hw),
+	.read_adr(read_adr),
+	.write_req(write_req),
+	.write_w(write_w),
+	.write_hw(write_hw),
+	.write_adr(write_adr),
+	.write_data(write_data)
+	);
+
+uart_top uart_top (
+	.clk(clk),
+	.rst_n(rst_n),
+	.rx(rx),
+	.tx(tx),
+	.u_read_req(u_read_req),
+	.u_read_w(u_read_w),
+	.read_valid(read_valid),
+	.u_read_adr(u_read_adr),
+	.read_data(read_data),
+	.u_write_req(u_write_req),
+	.u_write_w(u_write_w),
+	.write_finish(write_finish),
+	.u_write_adr(u_write_adr),
+	.u_write_data(u_write_data),
+	.dma_io_we(dma_io_we_u),
+	.dma_io_wadr(dma_io_wadr_u),
+	.dma_io_wdata(dma_io_wdata_u),
+	.dma_io_radr(dma_io_radr_u),
+	.dma_io_radr_en(dma_io_radr_en_u),
+	.dma_io_rdata_in(dma_io_rdata),
+	.csr_radr_en_mon(csr_radr_en_mon),
+	.csr_radr_mon(csr_radr_mon),
+	.csr_wadr_mon(csr_wadr_mon),
+	.csr_we_mon(csr_we_mon),
+	.csr_wdata_mon(csr_wdata_mon),
+	.csr_rdata_mon(csr_rdata_mon),
+	.rf_radr_en_mon(rf_radr_en_mon),
+	.rf_radr_mon(rf_radr_mon),
+	.rf_wadr_mon(rf_wadr_mon),
+	.rf_we_mon(rf_we_mon),
+	.rf_wdata_mon(rf_wdata_mon),
+	.rf_rdata_mon(rf_rdata_mon),
+	.pc_data(pc_data),
+	.cmd_ld_ma(cmd_ld_ma),
+	.cmd_st_ma(cmd_st_ma),
+	.rd_data_ma(rd_data_ma),
+	.cpu_start(cpu_start),
+	.cpu_run_state(cpu_run_state),
+	.quit_cmd(quit_cmd),
+	.start_adr(cpu_start_adr),
+	.uart_io_char(uart_io_char),
+	.uart_io_we(uart_io_we),
+	.uart_io_full(uart_io_full),
+	.uart_term(uart_term),
+	.rout_en(rout_en),
+	.rout(rout),
+	.rx_disable_echoback(rx_disable_echoback)
+	);
+
+qspi_if qspi_if (
+	.clk(clk),
+	.rst_n(rst_n),
+	.sck(sck),
+	.ce_n(ce_n),
+	//.sio(sio),
+	.sio_i(sio_i),
+	.sio_o(sio_o),
+	.sio_en(sio_en),
+	.init_latency(init_latency),
+	.init_qspicmd(init_qspicmd),
+	.read_req(read_req),
+	.read_w(read_w),
+	.read_hw(read_hw),
+	.read_valid(read_valid),
+	.read_adr(read_adr),
+	.read_data(read_data),
+	.write_req(write_req),
+	.write_w(write_w),
+	.write_hw(write_hw),
+	.write_finish(write_finish),
+	.write_adr(write_adr),
+	.write_data(write_data),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in_4),
+	.dma_io_rdata(dma_io_rdata_in_5)
+	);
+
+io_led io_led (
+	.clk(clk),
+	.rst_n(rst_n),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in_2),
+	.dma_io_rdata(dma_io_rdata_in_3),
+	.rgb_led(rgb_led_org),
+	.init_uart(init_uart),
+	.init_latency(init_latency),
+	.init_cpu_start(init_cpu_start),
+	.gpi_in(init_qspicmd),
+	//.gpio(gpio)
+	.gpio_i(gpio_i),
+	.gpio_o(gpio_o),
+	.gpio_en(gpio_en)
+	);
+
+io_uart_out io_uart_out (
+	.clk(clk),
+	.rst_n(rst_n),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in),
+	.dma_io_rdata(dma_io_rdata_in_2),
+	.uart_io_char(uart_io_char),
+	.uart_io_we(uart_io_we),
+	.uart_io_full(uart_io_full),
+	.init_uart(init_uart),
+	.uart_term(uart_term),
+	.cpu_run_state(cpu_run_state),
+	.rout_en(rout_en),
+	.rout(rout),
+	.ext_uart_interrpt_1shot(ext_uart_interrpt_1shot),
+	.rx_disable_echoback(rx_disable_echoback)
+	);
+
+
+io_frc io_frc (
+	.clk(clk),
+	.rst_n(rst_n),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in_3),
+	.dma_io_rdata(dma_io_rdata_in_4),
+	.csr_mtie(csr_mtie),
+	.frc_cntr_val_leq(frc_cntr_val_leq)
+	);
+
+interrupter interrupter (
+	.clk(clk),
+	.rst_n(rst_n),
+	.interrupt_0(interrupt_0),
+	.ext_uart_interrpt_1shot(ext_uart_interrpt_1shot),
+	.csr_rmie(csr_rmie),
+	.csr_meie(csr_meie),
+	.g_interrupt_1shot(g_interrupt_1shot),
+	.g_interrupt(g_interrupt),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in_5),
+	.dma_io_rdata(dma_io_rdata_in_6)
+	);
+
+io_spi_lite io_spi_lite(
+	.clk(clk),
+	.rst_n(rst_n),
+	.dma_io_we(dma_io_we),
+	.dma_io_wadr(dma_io_wadr),
+	.dma_io_wdata(dma_io_wdata),
+	.dma_io_radr(dma_io_radr),
+	.dma_io_radr_en(dma_io_radr_en),
+	.dma_io_rdata_in(dma_io_rdata_in_6),
+	.dma_io_rdata(dma_io_rdata),
+	.spi_select_io(spi_select_io),
+	.spi_sck(spi_sck),
+	.spi_csn(spi_csn),
+	.spi_mosi(spi_mosi),
+	.spi_miso(spi_miso)
+	);
+
+endmodule
