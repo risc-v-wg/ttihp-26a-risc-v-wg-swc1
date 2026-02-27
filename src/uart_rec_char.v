@@ -201,7 +201,8 @@ wire bpoint_assart;
 wire rdbpoint_assart;
 //wire wdbpoint_assart;
 //wire all_bpoint_assart = bpoint_assart | rdbpoint_assart | wdbpoint_assart;
-wire all_bpoint_assart = bpoint_assart | rdbpoint_assart;
+//wire all_bpoint_assart = bpoint_assart | rdbpoint_assart;
+wire all_bpoint_assart = bpoint_assart;
 
 function [4:0] cmd_statemachine;
 input [4:0] cmd_status;
@@ -497,44 +498,50 @@ assign uart_data = data_word_out;
 
 reg [31:2] bpoint;
 reg bpoint_en;
+reg bpoint_ld;
 
 always @ (posedge clk or negedge rst_n) begin
 	if (~rst_n) begin
-		bpoint <= 32'd0;
+		bpoint <= 30'd0;
 		bpoint_en <= 1'b0;
+		bpoint_ld <= 1'b0;
 	end
-	else if (scmd_setdat & word_valid) begin
+	else if ((lcmd_setdat & word_valid)|(mcmd_setdat & word_valid)|(scmd_setdat & word_valid)) begin
 		bpoint <= data_word_out[31:2];
 		bpoint_en <= ~data_word_out[0];
+		bpoint_ld <= (lcmd_setdat & word_valid);
 	end
 end
 
 wire bpoint_assart_en = (bpoint == pc_data[31:2]) & bpoint_en;
-assign bpoint_assart = bpoint_assart_en & cpu_run_state;
+wire rdbpoint_assart_en = (bpoint == rd_data_ma[31:2]) & cmd_ld_ma & bpoint_ld & bpoint_en;
+wire wdbpoint_assart_en = (bpoint == rd_data_ma[31:2]) & cmd_st_ma & ~bpoint_ld & bpoint_en;
+//assign bpoint_assart = bpoint_assart_en & cpu_run_state;
 
 // data read break point
 // currently shared with wbp becase of logic size problem
 
-reg [31:2] rdbpoint;
-reg rdbpoint_en;
+//reg [31:2] rdbpoint;
+//reg rdbpoint_en;
 
-always @ (posedge clk or negedge rst_n) begin
-	if (~rst_n) begin
-		rdbpoint <= 32'd0;
-		rdbpoint_en <= 1'b0;
-	end
-	//else if (lcmd_setdat & word_valid) begin
-	else if ((lcmd_setdat & word_valid)|(mcmd_setdat & word_valid)) begin
-		rdbpoint <= data_word_out[31:2];
-		rdbpoint_en <= ~data_word_out[0];
-	end
-end
+//always @ (posedge clk or negedge rst_n) begin
+	//if (~rst_n) begin
+		//rdbpoint <= 32'd0;
+		//rdbpoint_en <= 1'b0;
+	//end
+	////else if (lcmd_setdat & word_valid) begin
+	//else if ((lcmd_setdat & word_valid)|(mcmd_setdat & word_valid)) begin
+		//rdbpoint <= data_word_out[31:2];
+		//rdbpoint_en <= ~data_word_out[0];
+	//end
+//end
 
-wire rdbpoint_assart_en = (rdbpoint == rd_data_ma[31:2]) & cmd_ld_ma & rdbpoint_en;
-wire wdbpoint_assart_en = (rdbpoint == rd_data_ma[31:2]) & cmd_st_ma & rdbpoint_en;
+//wire rdbpoint_assart_en = (rdbpoint == rd_data_ma[31:2]) & cmd_ld_ma & rdbpoint_en;
+//wire wdbpoint_assart_en = (rdbpoint == rd_data_ma[31:2]) & cmd_st_ma & rdbpoint_en;
 
-//assign rdbpoint_assart = rdbpoint_assart_en & cpu_run_state;
-assign rdbpoint_assart = (rdbpoint_assart_en|wdbpoint_assart_en) & cpu_run_state;
+////assign rdbpoint_assart = rdbpoint_assart_en & cpu_run_state;
+//assign rdbpoint_assart = (rdbpoint_assart_en|wdbpoint_assart_en) & cpu_run_state;
+assign bpoint_assart = (rdbpoint_assart_en|wdbpoint_assart_en|bpoint_assart_en) & cpu_run_state;
 
 assign dbg_bpoint = { wdbpoint_assart_en, rdbpoint_assart_en, bpoint_assart_en };
 
