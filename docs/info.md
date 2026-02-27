@@ -29,67 +29,36 @@ Connect external QSPI PSRAM and connect the UART to a terminal. Upload the test 
 
 UART monitor command list:
 - g : goto PC address (executes until Ctrl-c is pressed) : format: g <address>
-
 - Ctrl-c : Interrupts all commands. Press Ctrl-c if you get stuck : format: Ctrl-c
-
 - w : Writes data to memory : format: w <address> .<data>... Ctrl-c
-
 - r : Reads data from memory : format: r <start_address> <end_address>
-
 - s : Set breakpoint address: format s <break point address>
-
   When setting: Specify the address value where you want to break
-
   When clearing: Specify an odd number for the address (set bit[0] to 1)
-
 - l : Set data read breakpoint address: format l <break point address>
-
   When setting: Specify the address value where you want to break
-
   When clearing: Specify an odd number for the address (set bit[0] to 1)
-
 - m : Set data write breakpoint address: format m <break point address>
-
   When setting: Specify the address value where you want to break
-
   When clearing: Specify an odd number for the address (set bit[0] to 1)
-
 - j : Display the current PC value: format j
-
 - i : Write data to I/O registers, etc. The target changes based on the upper 2 bits of the address
-
   : format: I <address> <data> .... Ctrl-c
-
   Upper 2 bits == 2'b11 ; I/O register
-
   Upper 2 bits == 2'b10 : CSR register
-
   Upper 2 bits == 2'b00 : Register File
-
   *However, for CSR and RF, specify an address equal to 4 times the register number
-
   Example: Address for CSR mstatus (0x300) is 80000c00
-
   RF x3 Register: 0000 000c
-
 - p: Performs data read operations on I/O registers, etc. The upper 16 bits of the address are ignored
-
   : format: p <start_address> <end_address>
-
   Upper 2 bits == 2’b11 ; I/O Register
-
   Upper 2 bits == 2’b10 : CSR Register
-
   Upper 2 bits == 2’b00 : Register File
-
   *However, for CSR and RF registers, specify an address equal to 4 times the register number
-
   Example: CSR mstatus (0x300) address: 80000c00
-
   RF x3 Register 0000 000c
-
 - t : Memory zero-fill
-
   : format t <start_address> <end_address>
 
 
