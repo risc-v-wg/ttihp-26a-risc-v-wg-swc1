@@ -1,6 +1,6 @@
 # Tiny Tapeout project information
 project:
-  title:        "risc-v-wg-swc1"      # Project title
+  title:        "ttihp-26a-risc-v-wg-swc1"      # Project title
   author:       "risc-v-wg"      # Your name
   discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
   description:  "RISCV rv32i"      # One line description of what your project does
