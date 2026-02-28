@@ -54,7 +54,7 @@
   "TOP_MARGIN_MULT": 1,
   "BOTTOM_MARGIN_MULT": 1,
   "LEFT_MARGIN_MULT": 6,
-  "RIGHT_MARGIN_MULT": 6,
+  "RIGHT_MARGIN_MULT": 8,
 
   "//": "Absolute die size",
   "FP_SIZING": "absolute",
